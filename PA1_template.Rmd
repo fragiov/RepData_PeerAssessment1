@@ -1,20 +1,179 @@
 # Reproducible Research: Peer Assessment 1
-
-
+*by Francesco Giovinazzi* [Italy]
 ## Loading and preprocessing the data
-
-
+I have loaded the dataset in .csv format and named it `activity`. Then I applied a transformation to the `date` variable in order to change its class from `factor` to `Date`. I used the function `str` to show the structure of the transformed dataset.
+```{r}
+activity <- read.csv("activity.csv", header=TRUE, sep=",")
+activity$date <- as.Date(activity$date)
+str(activity)
+```
 
 ## What is mean total number of steps taken per day?
+I have calculated the total number of steps taken per day using the function `tapply` to iterate the function `sum` on the number of steps through each day.
+```{r}
+totsteps <- with(activity, tapply(steps, date, sum))
+totsteps
+```
 
+I have rapresented the variable `totsteps` with a histogram.
+```{r}
+hist(totsteps, breaks = 10, col="forestgreen", 
+     main="Histogram of the total number of steps taken each day", 
+     xlab="Total number of steps taken each day")
+rug(totsteps, col="forestgreen")
+```
+
+I have calculated the mean and median total number of steps taken per day, ignoring the NAs.
+```{r}
+measteps <- mean(totsteps, na.rm=TRUE)
+measteps
+medsteps <- median(totsteps, na.rm=TRUE)
+medsteps
+```
+The mean total number of steps taken per day is `r measteps`, while the median total number of steps taken per day is `r medsteps`.
 
 
 ## What is the average daily activity pattern?
+In order to make a time series plot of the 5-minute interval and the average number of steps taken, I have created a variable, named `interfac`, that contains all the possible values of the variabile `interval` (the values of `interfac` are the levels of `interval`) and that identifies unambiguously each 5-minutes interval.
+Along the levels of `interval`I have then calculated the average number of steps. The variabile `avdsteps` contains the mean number of steps taken into a certain interval avereged accross all days.
+
+```{r}
+interfac <- as.numeric(names(table(activity$interval)))
+avdsteps <- with(activity, aggregate(steps, by=list(interval), FUN = mean, na.rm=TRUE))[[2]]
+```
+
+Using the base plotting system, I have rapresented as a line plot the average number of steps taken in each interval averaged accross all days.
+
+```{r}
+plot(interfac, avdsteps, type="l", col="forestgreen", lwd=2,
+     main = "Line plot of the 5-minute interval
+     and the average number of steps taken
+     (Averaged across all days)",
+     xlab ="5-minute interval", xaxt='n',
+     ylab ="Average number of steps taken per interval")
+axis(1, at = interfac[seq(0, length(interfac), by=10)], las=2, cex=0.03)
+maxint <- interfac[which(avdsteps==max(avdsteps))]
+maxint
+abline(v=maxint, col="tomato", lty=2)
+
+```
 
 
-
+We can see that there is a peak between the intervals 800 and 900, so I calculated the interval corresponding to the maximum number of steps and traced a red line in corrispondence. This interval is the `r maxint`.
+ 
 ## Imputing missing values
 
+I have calculated the total number of missing observations in the dataset. In order to get the total number of rows containing at least one NA, I used the function `is.na` that returns a matrix of `TRUE` and `FALSE` (`TRUE` corresponds to NA), then I have made the sum on each row and counted how many row had values different from 0 (a row with 0 TRUE is a complete observation, without NA). In our case we could have used simple the function `sum(is.na(activity))` because the NAs are only in one column. 
 
+```{r}
+rowNA <- sum(rowSums(is.na(activity))!=0)
+rowNA
+```
+
+The number of NAs is `r rowNA`. In order to understand better the structure of missing values, I studied the dataset `activity[is.na(activity),]`, containing only the rows with NAs. I verified that all the `r rowNA` missing values are in the first column (the variable `steps`), I noticed also that in this sub-dataset we have observation for 8 days (looking at the table of `date`) and 288 intervals for each day (looking at the table of `interval`). This information will turn out to be very useful in the definition of an imputation strategy. 
+
+```{r}
+sum(is.na(activity[is.na(activity),]$steps))
+table(activity[is.na(activity),]$date)
+table(activity[is.na(activity),]$interval)
+length(table(activity[is.na(activity),]$interval))
+```
+
+I have created the dataset `activityfilled` as a copy of `activity`, then I have selected only the rows containing the NAs `activityfilled[is.na(activityfilled),]` and the column corresponding to the variable `steps`. I have decided to replace the missing values in `steps` with the average number of steps taken into a certain 5-minutes interval, for this reason a I have repeated 8 times (using the function `rep`) the variable `avdsteps` (rounded without decimals). 
+
+```{r}
+activityfilled <- activity
+activityfilled[is.na(activityfilled),]$steps <- rep(round(avdsteps),8)
+
+sum(is.na(activityfilled))
+```
+
+`avdsteps` has 288 elements (one per interval), and in each of the 8 days we have exactly 288 intervals, so  288 $\times$ 8 = `r rowNA`. After the imputation I have verified that the dataset has no more NAs.
+
+
+In order to see if tthe imputation has changed something in the data structure, I have made a new histogram and calculated again the mean and median total number of steps taken per day.
+
+```{r}
+totstepsfilled <- with(activityfilled, tapply(steps, date, sum))
+hist(totstepsfilled, breaks = 10, col="forestgreen", 
+     main="Histogram of the total number of steps taken each day
+     (After the NAs imputation)", 
+     xlab="Total number of steps taken each day")
+rug(totsteps, col="forestgreen")
+```
+
+From the histogram we can see that the distribution appears to be more concentrated around the mean, there is less variability and the central column is higher then before the imputation. By the way, the overall shape of the graphic is not changed so much. This is obbvious because we have replaced missing values with mean values, enhancing the central tendency. 
+
+```{r}
+meastepsfilled <- mean(totstepsfilled, na.rm=TRUE)
+meastepsfilled
+medstepsfilled <- median(totstepsfilled, na.rm=TRUE)
+medstepsfilled
+```
+
+Looking at the new values of mean and median we can gather the same conclusions: 
+- the mean is `r meastepsfilled` and it is not changed at all, this because (adding values near the mean) we have strenghtened the concentration toward the average;
+- the median is `r medstepsfilled` and it is decreased in value (before the imputation it was `r medsteps`). This appened because (adding values near the mean) we have caused higher values to be less impacting on the definition of the second quartile.
+
+
+After the imputation, the total number of steps taken per day is not changed at all, there is perfect correspondence between the values of `totsteps` and `totstepsfilled`. We can verify this noticing that the difference between the two values is always 0 or, using a simple plot, that the points are located along the bisector line (with eqation $Y = X$).
+
+```{r}
+totstepsfilled - totsteps
+plot(totsteps,totstepsfilled, pch=19, cex = 1.3, col="forestgreen",
+     main = "Correspondence of total number of steps taken per day
+     before and after the NAs imputation")
+abline(a=0, b=1, col= "tomato")
+```
 
 ## Are there differences in activity patterns between weekdays and weekends?
+Using the `vector` function I have created a new empty variable in the dataset `activityfilled` and named it `weekpart`. The variable `weekpart` should be a factor with two levels - "weekday" and "weekend" indicating whether a given date is a weekday or weekend day.
+
+To fill in the values of this variable I implemented a for loop with `r length(activityfilled$steps)` iterations. At each iteration R verifies an if condition:
+- if the i-th value of `date` (after applying the function `weekdays`) is sunday (*domenica* in Italian) or saturday (*sabato* in Italian), the i-th value of `weekpart` is assigned to be "weekend";
+- if the i-th value of `date` (after applying the function `weekdays`) is any other day of the week, the i-th value of `weekpart` is assigned to be "weekday".  
+
+```{r cache=TRUE}
+activityfilled$weekpart <- vector("character", length(activityfilled$steps)) 
+for (i in 1:length(activityfilled$weekpart)){
+  if (weekdays(activityfilled$date[i]) == "domenica" | weekdays(activityfilled$date[i]) == "sabato"){
+    activityfilled$weekpart[i] <- "weekend"
+  } else {
+    activityfilled$weekpart[i] <- "weekday"
+  }
+}
+
+table(activityfilled$weekpart)
+```
+In the dataset we have 12960 observations for the weekdays and 4608 for the weekend days.  
+
+
+
+Using the base plotting system, I have made a panel visualization containing the two line plot of the 5-minute interval and the average number of steps taken, averaged across all weekday days or weekend days. So I have calculated the needed values (`interfacfilledwe`, `avdstepsfilledwe`, `interfacfilledwd`, `avdstepsfilledwd`),  separately for the weekend and weekday, and plotted the two time series.
+
+```{r}
+interfacfilledwe <- with(activityfilled[activityfilled$weekpart=="weekend",], 
+                         as.numeric(names(table(interval))))
+avdstepsfilledwe <- with(activityfilled[activityfilled$weekpart=="weekend",], 
+                         aggregate(steps, by=list(interval), FUN = mean))[[2]]
+
+interfacfilledwd <- with(activityfilled[activityfilled$weekpart=="weekday",], 
+                         as.numeric(names(table(interval))))
+avdstepsfilledwd <- with(activityfilled[activityfilled$weekpart=="weekday",], 
+                         aggregate(steps, by=list(interval), FUN = mean))[[2]]
+
+par(mfrow=c(2,1), mar=c(4,4,4,4))
+plot(interfacfilledwe, avdstepsfilledwe, type="l", col="forestgreen", lwd=2,
+     main = "Weekend",
+     xlab ="5-minute interval", xaxt='n',
+     ylab ="Average number of steps")
+axis(1, at = interfacfilledwe[seq(0, length(interfacfilledwe), by=10)], las=2, cex=0.03)
+plot(interfacfilledwd, avdstepsfilledwd, type="l", col="forestgreen", lwd=2,
+     main = "Weekdays",
+     xlab ="5-minute interval", xaxt='n',
+     ylab ="Average number of steps")
+axis(1, at = interfacfilledwd[seq(0, length(interfacfilledwd), by=10)], las=2, cex=0.03)
+```
+
+**We can see that after the interval 905 the average number of steps is consistently higher during the weekend  than during the week.**
+
